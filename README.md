@@ -1,14 +1,18 @@
-# Listing API - Slug Architecture 🚀
+# Soff Backend - Digital Marketplace API 🚀
 
-FastAPI, SQLAlchemy 2.0 va Pydantic v2 asosida yaratilgan zamonaviy, tezkor va SEO-friendly listing boshqaruv backend API loyihasi.
+FastAPI, SQLAlchemy 2.0 va Pydantic v2 asosida yaratilgan zamonaviy, tezkor va SEO-friendly raqamli mahsulotlar marketplace backend API loyihasi.
 
-## 🌟 Imkoniyatlar
-- **Slug Architecture**: Har bir e'lon (listing) unikal, inson tushunadigan va SEO-mos `slug` orqali ochiladi (masalan: `/api/v1/listings/macbook-pro-16-m3-max`).
+## 🌟 Asosiy Imkoniyatlar
+- **Iyerarxik Kategoriya Tizimi**: 6 ta ota kategoriya va ularga tegishli sub-kategoriyalar iyerarxiyasi, listinglar soni hisobi.
+- **Slug Architecture**: Har bir kategoriya va e'lon inson tushunadigan, SEO-mos unikal `slug` orqali ochiladi.
+- **O'zbek tiliga moslashtirilgan Slugify**: O'zbek alifbosi (oʻ, gʻ, sh, ch va h.k.) va maxsus belgilar xatosiz lotin yozuviga transliteratsiya qilinadi.
+- **Ko'p rasmli galereya (ListingImage) va Fayl yuklash**: Mahsulotlarga bir nechta rasm biriktirish va `/api/v1/upload/image` orqali rasmlarni yuklash.
 - **SQLAlchemy 2.0**: Zamonaviy `Mapped` va `mapped_column` sintaksisi, SQLite va PostgreSQL (Render.com) bilan to'liq mos keladi.
 - **Pydantic v2**: Yuqori tezlikdagi validation va `model_config = ConfigDict(from_attributes=True)`.
-- **Avtomatik Seed**: Server birinchi marta ishga tushganda baza bo'sh bo'lsa, namunaviy ma'lumotlar avtomatik yuklanadi.
+- **Avtomatik Idempotent Seed**: Server birinchi marta ishga tushganda 6 ta ota kategoriya, 24 ta sub-kategoriya va 120 ta sifatli mahsulot bazaga avtomatik yuklanadi.
+- **Views Counter**: Mahsulot tafsilotlari sahifasi har safar ochilganda `views_count` avtomatik oshiriladi.
 - **CORS va StaticFiles**: Frontend bilan to'liq integratsiya va `/files/` orqali statik fayllarni tarqatish.
-- **Render.com Blueprint**: `render.yaml` orqali bir tugma bilan tekin serverga deploy qilish.
+- **Render.com Blueprint**: `render.yaml` orqali bir tugma bilan serverga deploy qilish.
 
 ---
 
@@ -40,24 +44,36 @@ Server ishga tushishi bilan jadvallar avtomatik yaratiladi va namunaviy ma'lumot
 
 ---
 
-## 📡 API Endpointlari
+## 📡 Asosiy API Endpointlari
 
+### 📂 Kategoriyalar (`/api/v1/categories`)
 | Metod | Yo'l | Tavsif |
 |---|---|---|
-| `GET` | `/` | API statusi va asosiy ma'lumotlar |
-| `GET` | `/health` | Server va DB holati (Health check) |
-| `GET` | `/api/v1/listings` | Listinglar ro'yxati (filter & pagination) |
-| `POST` | `/api/v1/listings` | Yangi listing yaratish (avtomatik unikal slug) |
-| `GET` | `/api/v1/listings/{slug}` | Slug bo'yicha bitta listingni olish |
-| `PATCH` | `/api/v1/listings/{slug}` | Slug bo'yicha listingni yangilash |
-| `GET` | `/files/{filename}` | Statik fayllarni ko'rish |
+| `GET` | `/api/v1/categories` | 6 ta ota kategoriya, ularning sub-kategoriyalari va mahsulotlar soni |
+| `GET` | `/api/v1/categories/{slug}` | Tanlangan kategoriya haqida to'liq ma'lumot va sub-kategoriyalari |
+| `GET` | `/api/v1/categories/{slug}/subcategories` | Faqat berilgan ota kategoriyaning sub-kategoriyalari |
+
+### 🛍 Mahsulotlar / Listinglar (`/api/v1/listings`)
+| Metod | Yo'l | Tavsif |
+|---|---|---|
+| `GET` | `/api/v1/listings` | Mahsulotlar ro'yxati (filter, search, pagination, `category_slug`, `subcategory_slug`) |
+| `POST` | `/api/v1/listings` | Yangi mahsulot yaratish (avtomatik unikal slug va kategoriya tekshiruvi) |
+| `GET` | `/api/v1/listings/{slug}` | Mahsulot Detail sahifasi (views_count +1, to'liq ma'lumotlar, galereya rasmlari) |
+| `PATCH` | `/api/v1/listings/{slug}` | Mahsulotni qisman yangilash (title o'zgarsa slug avtomatik yangilanadi) |
+| `DELETE` | `/api/v1/listings/{slug}` | Mahsulotni bazadan o'chirish |
+| `POST` | `/api/v1/listings/{slug}/images` | Mahsulotga bir yoki bir nechta rasm yuklab biriktirish |
+
+### 🖼 Fayllar va Media (`/api/v1/upload`)
+| Metod | Yo'l | Tavsif |
+|---|---|---|
+| `POST` | `/api/v1/upload/image` | Rasm yuklash (`multipart/form-data`) va URL olish |
+| `GET` | `/files/{filename}` | Statik rasm va fayllarni yuklab olish/ko'rish |
 
 ---
 
 ## ☁️ Render.com ga Deploy qilish
 
-1. Loyihani GitHub'ga yuklang.
+1. Repozitoriyni GitHub'ga yuklang.
 2. [Render.com](https://render.com) ga kiring va **New +** -> **Blueprint** ni tanlang.
-3. GitHub repozitoriyangizni ulang. Render avtomatik ravishda `render.yaml` faylini aniqlaydi va deploy jarayonini boshlaydi.
-4. Deploy tugagach, sizga `https://<app-name>.onrender.com` manzilidagi jonli havola beriladi.
-5. Swagger hujjati: `https://<app-name>.onrender.com/docs`
+3. Repozitoriyangizni ulang. Render avtomatik ravishda `render.yaml` faylini o'qiydi va deploy jarayonini boshlaydi.
+4. Swagger hujjati: `https://<app-name>.onrender.com/docs`

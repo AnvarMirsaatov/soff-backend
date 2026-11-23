@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database import engine, Base, SessionLocal
-from app.routers import listings
+from app.routers import listings, categories, upload
 from seed import seed_data
 
 @asynccontextmanager
@@ -13,7 +13,8 @@ async def lifespan(app: FastAPI):
     """
     FastAPI Lifespan: Server ishga tushganda va to'xtaganda bajariladigan amallar.
     1. Barcha jadvallarni yaratadi (Base.metadata.create_all).
-    2. Agar baza bo'sh bo'lsa, seed.py orqali namunaviy ma'lumotlarni yuklaydi.
+    2. Agar baza bo'sh bo'lsa, seed.py orqali barcha 6 ta ota kategoriya,
+       sub-kategoriyalar va sifatli namunaviy listinglarni avtomatik yuklaydi.
     """
     print("[Lifespan] Server ishga tushmoqda...")
     # 1. Jadvallarni yaratish
@@ -33,25 +34,27 @@ async def lifespan(app: FastAPI):
     print("[Lifespan] Server to'xtatildi.")
 
 app = FastAPI(
-    title="Listing API - Slug Architecture",
+    title="Soff Backend - Digital Marketplace API",
     description=(
-        "FastAPI + SQLAlchemy 2.0 + Pydantic v2 asosida ishlab chiqilgan Listing API.\n\n"
-        "Asosiy xususiyatlari:\n"
-        "- SEO-friendly unikal **Slug Architecture**\n"
-        "- Pagination va filtratsiya (kategoriya, status, qidiruv)\n"
-        "- Render.com va PostgreSQL ga to'liq moslashgan\n"
-        "- Statik fayllar (/files) qo'llab-quvvatlovi"
+        "FastAPI + SQLAlchemy 2.0 + Pydantic v2 asosida ishlab chiqilgan raqamli mahsulotlar va listinglar API si.\n\n"
+        "Asosiy imkoniyatlar:\n"
+        "- 6 ta asosiy va iyerarxik Sub-kategoriyalar tizimi\n"
+        "- O'zbek tiliga moslashtirilgan unikal **Slug Architecture**\n"
+        "- Ko'p rasmli galereya (ListingImage) va fayl yuklash (/upload)\n"
+        "- Filtratsiya, qidiruv, narx bo'yicha saralash va sahifalash (Pagination)\n"
+        "- Mahsulot ko'rishlar soni hisoblagichi (views_count)\n"
+        "- Render.com va PostgreSQL ga to'liq moslashgan"
     ),
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc"
 )
 
-# 1. CORS Middleware sozlamasi (Frontend bemalol ulana olishi uchun)
+# 1. CORS Middleware sozlamasi (Frontend integratsiyasi uchun)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Productionda xohishga ko'ra aniq domainlar kiritilishi mumkin
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -63,21 +66,27 @@ os.makedirs(FILES_DIR, exist_ok=True)
 app.mount("/files", StaticFiles(directory=FILES_DIR), name="files")
 
 # 3. Routerlarni ulash
+app.include_router(categories.router)
 app.include_router(listings.router)
+app.include_router(upload.router)
 
 # 4. Asosiy va sog'liqni tekshirish (Health check) endpointlari
 @app.get("/", tags=["Root"])
 def root():
     return {
-        "name": "Listing API - Slug Architecture",
+        "name": "Soff Backend - Digital Marketplace API",
         "status": "online",
         "documentation": {
             "swagger": "/docs",
             "redoc": "/redoc"
         },
         "endpoints": {
-            "list_and_create": "/api/v1/listings",
-            "detail_and_update": "/api/v1/listings/{slug}",
+            "categories": "/api/v1/categories",
+            "category_detail": "/api/v1/categories/{slug}",
+            "subcategories": "/api/v1/categories/{slug}/subcategories",
+            "listings": "/api/v1/listings",
+            "listing_detail": "/api/v1/listings/{slug}",
+            "upload_image": "/api/v1/upload/image",
             "static_files": "/files/"
         }
     }

@@ -15,7 +15,7 @@ def custom_slugify(text: str) -> str:
     Misol: "O'zbekiston & Toshkent №1!" -> "ozbekiston-and-toshkent-no1"
     """
     if not text:
-        return "listing"
+        return "item"
 
     # O'zbek tili va maxsus harflar uchun mapping
     replacements = {
@@ -24,6 +24,8 @@ def custom_slugify(text: str) -> str:
         "Oʻ": "o", "O'": "o", "O`": "o", "O‘": "o",
         "Gʻ": "g", "G'": "g", "G`": "g", "G‘": "g",
         "sh": "sh", "ch": "ch", "yo": "yo", "yu": "yu", "ya": "ya",
+        "Sh": "sh", "Ch": "ch", "Yo": "yo", "Yu": "yu", "Ya": "ya",
+        "SH": "sh", "CH": "ch", "YO": "yo", "YU": "yu", "YA": "ya",
         "&": "and", "@": "at", "%": "percent", "#": "num"
     }
     for old, new in replacements.items():
@@ -38,14 +40,13 @@ def custom_slugify(text: str) -> str:
         slug = re.sub(r"[^\w\s-]", "", ascii_text).strip()
         slug = re.sub(r"[-\s]+", "-", slug)
 
-    return slug or "listing"
+    return slug or "item"
 
 def generate_unique_slug(db: Session, text: str, current_id: Optional[int] = None) -> str:
     """
-    Bazada unikal bo'lgan slug hosil qiladi.
-    Agar 'macbook-pro' mavjud bo'lsa -> 'macbook-pro-1', 'macbook-pro-2' ...
+    Bazada unikal bo'lgan Listing slug hosil qiladi.
+    Agar 'kurs-ishi' mavjud bo'lsa -> 'kurs-ishi-1', 'kurs-ishi-2' ...
     """
-    # Kechiktirilgan import (circular import oldini olish uchun)
     from app.models import Listing
 
     base_slug = custom_slugify(text)
@@ -56,6 +57,27 @@ def generate_unique_slug(db: Session, text: str, current_id: Optional[int] = Non
         query = db.query(Listing).filter(Listing.slug == candidate)
         if current_id is not None:
             query = query.filter(Listing.id != current_id)
+        exists = query.first()
+        if not exists:
+            return candidate
+
+        candidate = f"{base_slug}-{counter}"
+        counter += 1
+
+def generate_unique_category_slug(db: Session, text: str, current_id: Optional[int] = None) -> str:
+    """
+    Bazada unikal bo'lgan Category slug hosil qiladi.
+    """
+    from app.models import Category
+
+    base_slug = custom_slugify(text)
+    candidate = base_slug
+    counter = 1
+
+    while True:
+        query = db.query(Category).filter(Category.slug == candidate)
+        if current_id is not None:
+            query = query.filter(Category.id != current_id)
         exists = query.first()
         if not exists:
             return candidate
