@@ -11,33 +11,30 @@ class CategorySimple(BaseModel):
     name: str
     slug: str
     icon: Optional[str] = None
+    level: int = 1
+    parent_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class SubcategoryResponse(BaseModel):
+class CategoryTreeResponse(BaseModel):
     id: int
     name: str
     slug: str
     description: Optional[str] = None
     icon: Optional[str] = None
+    level: int = 1
     parent_id: Optional[int] = None
     listings_count: int = 0
+    children: List["CategoryTreeResponse"] = []
+    subcategories: List["CategoryTreeResponse"] = []
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class CategoryResponse(BaseModel):
-    id: int
-    name: str
-    slug: str
-    description: Optional[str] = None
-    icon: Optional[str] = None
-    parent_id: Optional[int] = None
-    subcategories: List[SubcategoryResponse] = []
-    listings_count: int = 0
-
-    model_config = ConfigDict(from_attributes=True)
+# Backwards compatibility aliases
+CategoryResponse = CategoryTreeResponse
+SubcategoryResponse = CategoryTreeResponse
 
 
 class CategoryCreate(BaseModel):
@@ -95,7 +92,8 @@ class ListingBase(BaseModel):
 class ListingCreate(ListingBase):
     slug: Optional[str] = Field(None, description="Ixtiyoriy. Berilmasa, title dan avtomatik unikal slug yasaladi.")
     category_id: int = Field(..., description="Ota kategoriya ID si", examples=[1])
-    subcategory_id: Optional[int] = Field(None, description="Sub-kategoriya ID si", examples=[2])
+    inner_category_id: Optional[int] = Field(None, description="2-darajali Ichki kategoriya ID si", examples=[2])
+    subcategory_id: Optional[int] = Field(None, description="3-darajali Sub-kategoriya ID si", examples=[3])
 
 
 class ListingUpdate(BaseModel):
@@ -108,6 +106,7 @@ class ListingUpdate(BaseModel):
     is_featured: Optional[bool] = None
     status: Optional[str] = None
     category_id: Optional[int] = None
+    inner_category_id: Optional[int] = None
     subcategory_id: Optional[int] = None
 
 
@@ -115,8 +114,10 @@ class ListingResponse(ListingBase):
     id: int
     slug: str
     category_id: int
+    inner_category_id: Optional[int] = None
     subcategory_id: Optional[int] = None
     category: Optional[CategorySimple] = None
+    inner_category: Optional[CategorySimple] = None
     subcategory: Optional[CategorySimple] = None
     images: List[ListingImageResponse] = []
     views_count: int = 0

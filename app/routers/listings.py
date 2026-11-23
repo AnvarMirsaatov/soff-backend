@@ -30,12 +30,14 @@ def list_listings(
     is_featured: Optional[bool] = Query(None, description="Tanlangan mahsulotlar bo'yicha filter"),
     min_price: Optional[float] = Query(None, ge=0.0, description="Minimal narx"),
     max_price: Optional[float] = Query(None, ge=0.0, description="Maksimal narx"),
-    category_slug: Optional[str] = Query(None, description="Ota kategoriya slugi"),
-    subcategory_slug: Optional[str] = Query(None, description="Sub-kategoriya slugi"),
+    category_slug: Optional[str] = Query(None, description="Ota, ichki yoki sub-kategoriya slugi (rekursiv qidiradi)"),
+    subcategory_slug: Optional[str] = Query(None, description="Aniq sub-kategoriya slugi"),
     db: Session = Depends(get_db)
 ):
     """
     Barcha listinglarni qidiruv, kategoriya, narx va boshqa filtrlar bilan qaytaradi.
+    `category_slug` ota yoki ichki kategoriya bo'lsa, uning barcha quyi sub-kategoriyalaridagi
+    mahsulotlarni ham avtomatik yig'ib qaytaradi.
     """
     items, total = crud.get_listings(
         db,
@@ -59,7 +61,7 @@ def create_listing(
 ):
     """
     Yangi mahsulot qo'shadi.
-    `category_id` va agar kiritilgan bo'lsa `subcategory_id` tekshiriladi.
+    `category_id`, `inner_category_id` va `subcategory_id` tekshiriladi.
     `slug` avtomatik unikal tarzda yaratiladi.
     """
     category = crud.get_category_by_id(db, listing_in.category_id)
@@ -69,17 +71,25 @@ def create_listing(
             detail=f"ID {listing_in.category_id} ga ega bo'lgan ota kategoriya topilmadi."
         )
 
+    if listing_in.inner_category_id:
+        inner_cat = crud.get_category_by_id(db, listing_in.inner_category_id)
+        if not inner_cat:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"ID {listing_in.inner_category_id} ga ega bo'lgan ichki kategoriya topilmadi."
+            )
+        if inner_cat.parent_id != category.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ichki kategoriya '{inner_cat.name}' '{category.name}' ota kategoriyasiga tegishli emas."
+            )
+
     if listing_in.subcategory_id:
         subcategory = crud.get_category_by_id(db, listing_in.subcategory_id)
         if not subcategory:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"ID {listing_in.subcategory_id} ga ega bo'lgan sub-kategoriya topilmadi."
-            )
-        if subcategory.parent_id != category.id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Tanlangan sub-kategoriya ('{subcategory.name}') '{category.name}' ota kategoriyasiga tegishli emas."
             )
 
     return crud.create_listing(db, listing_in)
@@ -117,6 +127,11 @@ def update_listing(
         cat = crud.get_category_by_id(db, listing_in.category_id)
         if not cat:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kategoriya topilmadi")
+
+    if listing_in.inner_category_id is not None:
+        inner = crud.get_category_by_id(db, listing_in.inner_category_id)
+        if not inner:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ichki kategoriya topilmadi")
 
     if listing_in.subcategory_id is not None:
         sub = crud.get_category_by_id(db, listing_in.subcategory_id)

@@ -12,6 +12,7 @@ class Category(Base):
     slug: Mapped[str] = mapped_column(String(200), unique=True, index=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     icon: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    level: Mapped[int] = mapped_column(Integer, default=1, nullable=False, index=True)
     parent_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("categories.id", ondelete="CASCADE"),
         nullable=True,
@@ -21,12 +22,13 @@ class Category(Base):
     parent: Mapped[Optional["Category"]] = relationship(
         "Category",
         remote_side=[id],
-        back_populates="subcategories"
+        back_populates="children"
     )
-    subcategories: Mapped[List["Category"]] = relationship(
+    children: Mapped[List["Category"]] = relationship(
         "Category",
         back_populates="parent",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
+        order_by="Category.id"
     )
 
     listings: Mapped[List["Listing"]] = relationship(
@@ -34,14 +36,23 @@ class Category(Base):
         foreign_keys="[Listing.category_id]",
         back_populates="category"
     )
+    inner_listings: Mapped[List["Listing"]] = relationship(
+        "Listing",
+        foreign_keys="[Listing.inner_category_id]",
+        back_populates="inner_category"
+    )
     sub_listings: Mapped[List["Listing"]] = relationship(
         "Listing",
         foreign_keys="[Listing.subcategory_id]",
         back_populates="subcategory"
     )
 
+    @property
+    def subcategories(self) -> List["Category"]:
+        return self.children
+
     def __repr__(self) -> str:
-        return f"<Category id={self.id} name='{self.name}' slug='{self.slug}'>"
+        return f"<Category id={self.id} level={self.level} name='{self.name}' slug='{self.slug}'>"
 
 
 class ListingImage(Base):
@@ -70,6 +81,11 @@ class Listing(Base):
     category_id: Mapped[int] = mapped_column(
         ForeignKey("categories.id", ondelete="RESTRICT"),
         nullable=False,
+        index=True
+    )
+    inner_category_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
         index=True
     )
     subcategory_id: Mapped[Optional[int]] = mapped_column(
@@ -104,6 +120,11 @@ class Listing(Base):
         "Category",
         foreign_keys=[category_id],
         back_populates="listings"
+    )
+    inner_category: Mapped[Optional["Category"]] = relationship(
+        "Category",
+        foreign_keys=[inner_category_id],
+        back_populates="inner_listings"
     )
     subcategory: Mapped[Optional["Category"]] = relationship(
         "Category",

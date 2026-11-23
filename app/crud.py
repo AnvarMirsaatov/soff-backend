@@ -6,12 +6,67 @@ from app.schemas import ListingCreate, ListingUpdate, CategoryCreate, CategoryUp
 from app.utils import generate_unique_slug, generate_unique_category_slug
 
 # ==========================================
-# Category CRUD
+# Category Helpers & CRUD
 # ==========================================
 
-def get_parent_categories(db: Session) -> List[dict]:
+def get_category_descendant_ids(db: Session, category_id: int) -> List[int]:
     """
-    Barcha ota kategoriyalarni sub-kategoriyalari va har birining listinglar soni bilan qaytaradi.
+    Kategoriya va uning barcha quyi (bolalar, nabiralar va h.k.) ID larini rekursiv yig'adi.
+    """
+    ids = [category_id]
+    to_visit = [category_id]
+    while to_visit:
+        curr_id = to_visit.pop(0)
+        children = db.query(Category.id).filter(Category.parent_id == curr_id).all()
+        for (c_id,) in children:
+            ids.append(c_id)
+            to_visit.append(c_id)
+    return ids
+
+def count_listings_for_category(db: Session, category_id: int) -> int:
+    """
+    Kategoriya va uning ostidagi barcha quyi kategoriyalarga tegishli mahsulotlar sonini hisoblaydi.
+    """
+    descendant_ids = get_category_descendant_ids(db, category_id)
+    return db.query(Listing).filter(
+        or_(
+            Listing.category_id.in_(descendant_ids),
+            Listing.inner_category_id.in_(descendant_ids),
+            Listing.subcategory_id.in_(descendant_ids)
+        )
+    ).count()
+
+def build_category_node(db: Session, category: Category, include_children: bool = True) -> dict:
+    """
+    Bitta kategoriyani va (agar include_children=True bo'lsa) uning barcha bolalarini
+    rekursiv daraxt (tree) ko'rinishida shakllantiradi.
+    """
+    cat_count = count_listings_for_category(db, category.id)
+    children_list = []
+
+    if include_children and category.children:
+        for child in category.children:
+            child_node = build_category_node(db, child, include_children=True)
+            children_list.append(child_node)
+
+    return {
+        "id": category.id,
+        "name": category.name,
+        "slug": category.slug,
+        "description": category.description,
+        "icon": category.icon,
+        "level": category.level,
+        "parent_id": category.parent_id,
+        "listings_count": cat_count,
+        "children": children_list,
+        "subcategories": children_list
+    }
+
+def get_parent_categories(db: Session, include_children: bool = False) -> List[dict]:
+    """
+    Barcha 6 ta 1-darajali (ota) kategoriyani qaytaradi.
+    Agar include_children=True bo'lsa, 10 ta ichki kategoriya va ularning sub-kategoriyalarini
+    to'liq rekursiv daraxt sifatida yuklaydi.
     """
     parents = (
         db.query(Category)
@@ -22,93 +77,35 @@ def get_parent_categories(db: Session) -> List[dict]:
 
     result = []
     for parent in parents:
-        sub_list = []
-        for sub in parent.subcategories:
-            sub_count = db.query(Listing).filter(Listing.subcategory_id == sub.id).count()
-            sub_list.append({
-                "id": sub.id,
-                "name": sub.name,
-                "slug": sub.slug,
-                "description": sub.description,
-                "icon": sub.icon,
-                "parent_id": sub.parent_id,
-                "listings_count": sub_count
-            })
-
-        parent_count = db.query(Listing).filter(Listing.category_id == parent.id).count()
-        result.append({
-            "id": parent.id,
-            "name": parent.name,
-            "slug": parent.slug,
-            "description": parent.description,
-            "icon": parent.icon,
-            "parent_id": None,
-            "subcategories": sub_list,
-            "listings_count": parent_count
-        })
-
+        node = build_category_node(db, parent, include_children=include_children)
+        result.append(node)
     return result
 
 def get_category_by_slug(db: Session, slug: str) -> Optional[dict]:
     """
     Slug bo'yicha kategoriyani qidiradi.
-    Agar ota kategoriya bo'lsa, sub-kategoriyalar va listinglar soni bilan qaytaradi.
+    Uning darajasidan qat'i nazar (ota, ichki yoki sub), uning ma'lumotlarini
+    va bevosita ichidagi bolalarini (children) qaytaradi.
     """
     category = db.query(Category).filter(Category.slug == slug).first()
     if not category:
         return None
 
-    sub_list = []
-    for sub in category.subcategories:
-        sub_count = db.query(Listing).filter(Listing.subcategory_id == sub.id).count()
-        sub_list.append({
-            "id": sub.id,
-            "name": sub.name,
-            "slug": sub.slug,
-            "description": sub.description,
-            "icon": sub.icon,
-            "parent_id": sub.parent_id,
-            "listings_count": sub_count
-        })
-
-    listings_count = (
-        db.query(Listing).filter(Listing.category_id == category.id).count()
-        if category.parent_id is None
-        else db.query(Listing).filter(Listing.subcategory_id == category.id).count()
-    )
-
-    return {
-        "id": category.id,
-        "name": category.name,
-        "slug": category.slug,
-        "description": category.description,
-        "icon": category.icon,
-        "parent_id": category.parent_id,
-        "subcategories": sub_list,
-        "listings_count": listings_count
-    }
+    return build_category_node(db, category, include_children=True)
 
 def get_subcategories_by_parent_slug(db: Session, parent_slug: str) -> Optional[List[dict]]:
     """
-    Ota kategoriya slugiga asosan faqat uning sub-kategoriyalarini qaytaradi.
+    Berilgan kategoriya slugiga asosan faqat uning bevosita bolalarini (children) qaytaradi.
     """
-    parent = db.query(Category).filter(Category.slug == parent_slug, Category.parent_id == None).first()
+    parent = db.query(Category).filter(Category.slug == parent_slug).first()
     if not parent:
         return None
 
-    sub_list = []
-    for sub in parent.subcategories:
-        sub_count = db.query(Listing).filter(Listing.subcategory_id == sub.id).count()
-        sub_list.append({
-            "id": sub.id,
-            "name": sub.name,
-            "slug": sub.slug,
-            "description": sub.description,
-            "icon": sub.icon,
-            "parent_id": sub.parent_id,
-            "listings_count": sub_count
-        })
-    return sub_list
+    result = []
+    for child in parent.children:
+        child_node = build_category_node(db, child, include_children=True)
+        result.append(child_node)
+    return result
 
 def get_category_by_id(db: Session, category_id: int) -> Optional[Category]:
     return db.query(Category).filter(Category.id == category_id).first()
@@ -143,17 +140,32 @@ def get_listings(
 ) -> Tuple[List[Listing], int]:
     query = db.query(Listing)
 
+    # 1. category_slug bo'yicha rekursiv qidiruv
     if category_slug:
         cat = db.query(Category).filter(Category.slug == category_slug).first()
         if cat:
-            query = query.filter(Listing.category_id == cat.id)
+            descendant_ids = get_category_descendant_ids(db, cat.id)
+            query = query.filter(
+                or_(
+                    Listing.category_id.in_(descendant_ids),
+                    Listing.inner_category_id.in_(descendant_ids),
+                    Listing.subcategory_id.in_(descendant_ids)
+                )
+            )
         else:
             return [], 0
 
+    # 2. subcategory_slug bo'yicha qidiruv (aniq sub-kategoriya berilganda)
     if subcategory_slug:
         sub = db.query(Category).filter(Category.slug == subcategory_slug).first()
         if sub:
-            query = query.filter(Listing.subcategory_id == sub.id)
+            descendant_ids = get_category_descendant_ids(db, sub.id)
+            query = query.filter(
+                or_(
+                    Listing.subcategory_id.in_(descendant_ids),
+                    Listing.inner_category_id.in_(descendant_ids)
+                )
+            )
         else:
             return [], 0
 
@@ -196,7 +208,7 @@ def create_listing(db: Session, listing_in: ListingCreate) -> Listing:
     db.commit()
     db.refresh(listing)
 
-    # Agar image_url mavjud bo'lsa, asosiy rasm sifatida ListingImage jadvaliga ham qo'shamiz
+    # Agar image_url mavjud bo'lsa, asosiy rasm sifatida ListingImage ga qo'shamiz
     if listing.image_url:
         main_img = ListingImage(
             listing_id=listing.id,
